@@ -28,7 +28,7 @@ function myFunction () {
 
 ```js
 function myFunction () {
-  Import('AppscriptsRequests', {namespace: "AppscriptsRequests"}, {});
+  Import('AppscriptsRequests', {namespace: "Appscripts"}, {});
   Appscripts.new_();  // creates new project
 }
 ```
