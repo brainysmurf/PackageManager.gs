@@ -33,5 +33,15 @@ function myFunction () {
 }
 ```
 
-# Requests.gs
+# \_import.gs
 
+As long as this file is created before the other ones, you're all good.
+
+## Quickstart
+
+Install according to above. Import it:
+
+```js
+function myFunction () {
+  Import("Requests", {base
+}```
