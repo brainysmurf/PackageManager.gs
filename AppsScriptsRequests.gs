@@ -45,6 +45,7 @@ function AppsScriptsRequests_ (_config) {
     return requests('create').post({/*empty*/}, options);
   };
   var new_ = function (title, options) {
+    options = options || {};
     var resp, target;
     resp = create(title /* don't pass options */);
     _config.scriptId = resp.json().scriptId;
