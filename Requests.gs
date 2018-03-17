@@ -1,31 +1,43 @@
 (function(global,name,Package,helpers){var ref=function wrapper(args){var wrapped=function(){return Package.apply(global.Import&&Import.module?Import._import(name):global[name],arguments)};for(i in args){wrapped[i]=args[i]}return wrapped}(helpers);if(global.Import&&Import.module){Import.register(name,ref)}else{Object.defineProperty(global,name,{value:ref});global.Import=global.Import||function(lib){return global[lib]};Import.module=false}})(this,
 
-'Requests',
+"Requests",
 
 function RequestsPackage_ (config) {
+  var self = this, discovery, discoverUrl;
+  
+  discovery = function (name, version) {
+    return self().get('https://www.googleapis.com/discovery/v1/apis/' + name + '/' + version + '/rest');
+  };
+    
+  discoverUrl = function (name, version, category, method) {
+    var data;
+    data = discovery(name, version).json();
+    return data.baseUrl + data.resources[category].methods[method].path;
+  };
+
   config = config || {};
   config.baseUrl = config.baseUrl || "";
   config.body = config.body || {};
   config.headers = config.headers || null;
-  config.query = config.query || {};
+  config.query = config.query || {};  
   config.oauth = config.oauth || false;
-  config.basicAuth = config.basic || false;
+  config.basicAuth = config.basicAuth || false;
   config.discovery = config.discovery || null;
-
+  
   if (config.discovery && config.discovery.name && config.discovery.version && config.discovery.category && config.discovery.method) {
-    config.baseUrl = Requests.discoverUrl(config.discovery.name, config.discovery.version, config.discovery.category, config.discovery.method);
+    config.baseUrl = discoverUrl(config.discovery.name, config.discovery.version, config.discovery.category, config.discovery.method);
   }
   
   if (config.oauth) {
     config.headers = config.headers || {};
     config.headers['Authorization'] = "Bearer " + (config.oauth === 'me' ? ScriptApp.getOAuthToken() : config.oauth);
   }
-
+  
   if (config.basicAuth) {
     config.headers = config.headers || {};
     config.headers['Authorization'] = "Basic " + config.basicAuth;
   }
-
+  
   var Response = function (_resp) {
   
     return {
@@ -64,11 +76,36 @@ function RequestsPackage_ (config) {
           var utf_now = new Date().getTime();
           var milliseconds = reset_at - utf_now + 10;
           if (milliseconds > 0) {
+            Logger.log("Sleeping for " + (milliseconds/1000).toString() + " seconds.");
             Utilities.sleep(milliseconds);
           } 
           return true;
         }
         return false;
+      },
+      
+      /*
+      
+      */
+      paged: function (rootKey) {
+        if (typeof rootKey === 'undefined') throw Error('Specify path');
+        var json;
+        json = this.json();
+        if (!json.meta || !json.meta.total_pages) {
+          throw Error("Paged called with incomplete or missing meta property")
+        } else {
+          var page, batch, req, rawRequest;
+          batch = new BatchRequests();
+          page = 2;
+          while (json.meta.total_pages >= page) {
+            req = this.request;
+            req.setQuery('page', page);
+            rawRequest = req.toRequestObject();
+            batch.add( rawRequest );
+            page++;
+          }
+          return batch.fetchAll().zip(rootKey, json);
+        }
       },
       
       /*
@@ -172,7 +209,6 @@ function RequestsPackage_ (config) {
           url = origRequest.url;
           delete origRequest.url;
           resp.request = new Request(url, origRequest);
-          // resp.raw = ???
 
           if (resp.hitRateLimit()) {
             var request, r;
@@ -226,7 +262,7 @@ function RequestsPackage_ (config) {
     _options = _options || {};
     _options.url = _options.url || config.baseUrl;
     if (typeof _options.url === 'object' && config.baseUrl) {
-      _options.url = Requests.format(config.baseUrl, _options.url);
+      _options.url = self.format(config.baseUrl, _options.url);
     }
     _options.body = _options.body || {};
     _options.headers = _options.headers || null;
@@ -239,26 +275,23 @@ function RequestsPackage_ (config) {
         custom response object
       */
       build: function () {
-        var params = {}, resp, reply, url;
+        var params = {}, resp, reply;
 
         params.muteHttpExceptions = true;
         params.method = _options.method.toLowerCase();
         if (_options.headers || config.headers) {
-          params.headers = Requests.utils.merge(_options.headers, config.headers);
+          params.headers = self.utils.merge(_options.headers, config.headers);
         }
 
         if ( ['put', 'post'].indexOf(params.method) !== -1 ) {
-          params.payload = Requests.utils.merge(_options.body, config.body);
+          params.payload = self.utils.merge(_options.body, config.body);
           params.payload = JSON.stringify(params.payload);
           params.contentType = 'application/json';
         }
 
-        url = this.getUrl();
-        reply = UrlFetchApp.fetch(url, params);
+        reply = UrlFetchApp.fetch(this.getUrl(), params);
         resp = new Response(reply);
         resp.request = this;
-        resp.raw = UrlFetchApp.getRequest(url, params);
-        
         return resp;
       },
 
@@ -275,7 +308,7 @@ function RequestsPackage_ (config) {
       },
 
       getUrl: function () {
-        var obj = Requests.utils.merge(_options.query, config.query);
+        var obj = self.utils.merge(_options.query, config.query);
         if (_options.url.indexOf('?') !== -1) _options.url = _options.url.slice(0, _options.url.indexOf('?'));
         if (Object.keys(obj).length == 0) return _options.url;
         var ret = _options.url + "?" + Object.keys(obj).reduce(function(a,k){a.push(k+'='+encodeURIComponent(obj[k]));return a},[]).join('&');
@@ -291,7 +324,7 @@ function RequestsPackage_ (config) {
       },
             
       toRequestObject: function () {
-        return Requests.utils.merge({url: this.getUrl()}, _fetchParams);
+        return self.utils.merge({url: this.getUrl()}, _fetchParams);
       }
     };
   };
@@ -303,7 +336,7 @@ function RequestsPackage_ (config) {
       requests = items.reduce(function (acc, item) {
         var url, req, reqObj;
         if (typeof item[item.length-1] === 'object') {
-          options = Requests.utils.merge(item[item.length-1], options);
+          options = self.utils.merge(item[item.length-1], options);
           delete item[item.length-1];
         }
         item.splice(0, 0, urlTemplate);
@@ -353,32 +386,10 @@ function RequestsPackage_ (config) {
       options.method = 'options';
       return new Request(url, options).fetch();
     },
-    patch: function (url, options) {
-      options = options || {};
-      options.url = url;
-      options.method = 'patch';
-      return new Request(url, options).fetch();
-    }
   };
 },
 
-{ /* extensions */
-
-  discovery: function (name, version) {
-    return Requests().get('https://www.googleapis.com/discovery/v1/apis/' + name + '/' + version + '/rest');
-  },
-    
-  discoverUrl: function (name, version, category, method) {
-    var data, url;
-    data = Requests.discovery(name, version).json();
-    try {
-      url = data.baseUrl + data.resources[category].methods[method].path;
-    } catch (e) {
-      Logger.log(data);
-      throw Error("Category " + category + " or " + method + " method not present in discovery response. Raw response is in log.");
-    }
-    return url;
-  },
+{ /* helpers */
   
   /*
     http://www.{name}.com, {name: 'hey'} => http://www.hey.com
@@ -543,7 +554,7 @@ function RequestsPackage_ (config) {
       options.pathDelimiter = options.pathDelimiter || '.';
       var headers;
       rows = rows.map(function (row) {
-        return Requests.utils.dotize(row);
+        return self.utils.dotize(row);
       });
       headers = rows.reduce(function (everyHeader, row) {
         var prop;
@@ -567,8 +578,8 @@ function RequestsPackage_ (config) {
       });
       finalHeaders = mappedHeaders.map(function (el) {
         return headers[el.index];
-      }).filter(function (value, index, self) {
-        return self.indexOf(value) === index;
+      }).filter(function (value, index, me) {
+        return me.indexOf(value) === index;
       });
       
       return rows.reduce(function (acc, obj) {
