@@ -292,6 +292,7 @@ function RequestsPackage_ (config) {
         reply = UrlFetchApp.fetch(this.getUrl(), params);
         resp = new Response(reply);
         resp.request = this;
+        resp.raw = UrlFetchApp.getRequest(this.getUrl(), params);
         return resp;
       },
 
